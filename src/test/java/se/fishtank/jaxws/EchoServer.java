@@ -17,8 +17,9 @@ public class EchoServer {
     public static void main(String[] args) throws Exception {
         EchoWebService echoWebService = new EchoWebService();
 
-        Map<String, Object> mappings = new HashMap<String, Object>(1);
+        Map<String, Object> mappings = new HashMap<String, Object>(2);
         mappings.put("/echoService", echoWebService);
+        mappings.put("/honey/echoService2", echoWebService);
 
         JaxWsServer server = new JaxWsServer();
         server.start(new InetSocketAddress("localhost", 4040), mappings);

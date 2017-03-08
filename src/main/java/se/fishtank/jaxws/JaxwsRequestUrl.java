@@ -77,7 +77,7 @@ public final class JaxwsRequestUrl {
         String uri = request.getUri();
 
         String contextPath = "";
-        String pathInfo = null;
+        String pathInfo = "";
         String queryString = null;
         if (!"/".equals(uri)) {
             String prefix = uri;
@@ -111,7 +111,8 @@ public final class JaxwsRequestUrl {
         baseAddress.append(':');
         baseAddress.append(serverPort);
         baseAddress.append(contextPath);
-
+        baseAddress.append(pathInfo);
+        
         return new JaxwsRequestUrl(baseAddress.toString(), contextPath, pathInfo,
                 queryString, isSecure, serverName, serverPort);
     }

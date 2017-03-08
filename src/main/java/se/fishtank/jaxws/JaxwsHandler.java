@@ -90,6 +90,7 @@ public class JaxwsHandler extends SimpleChannelUpstreamHandler {
 
         JaxwsRequestUrl jaxwsRequestUrl = JaxwsRequestUrl.newInstance(ctx, request);
         String lookup = jaxwsRequestUrl.contextPath.isEmpty() ? "/" : jaxwsRequestUrl.contextPath;
+        lookup = lookup + (null == jaxwsRequestUrl.pathInfo || jaxwsRequestUrl.pathInfo.isEmpty() ? "" : jaxwsRequestUrl.pathInfo);
         HttpAdapter adapter = endpointMappings.get(lookup);
         if (adapter == null) {
             DefaultHttpResponse response = new DefaultHttpResponse(httpVersion, HttpResponseStatus.NOT_FOUND);

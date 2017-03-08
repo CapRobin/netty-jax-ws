@@ -9,10 +9,10 @@
     </parent>
     <groupId>se.fishtank</groupId>
     <artifactId>netty-jax-ws</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
     <packaging>jar</packaging>
     <name>netty-jax-ws</name>
-    <url>https://github.com/chrsan/netty-jax-ws</url>
+    <url>https://github.com/Honwhy/netty-jax-ws</url>
 
     <prerequisites>
         <maven>3.0.4</maven>
@@ -27,17 +27,17 @@
     </licenses>
 
     <scm>
-        <url>git@github.com:chrsan/netty-jax-ws.git</url>
-        <connection>scm:git:git@github.com:chrsan/netty-jax-ws.git</connection>
-        <developerConnection>scm:git:git@github.com:chrsan/netty-jax-ws.git</developerConnection>
+        <url>git@github.com:Honwhy/netty-jax-ws.git</url>
+        <connection>scm:git:git@github.com:Honwhy/netty-jax-ws.git</connection>
+        <developerConnection>scm:git:git@github.com:Honwhy/netty-jax-ws.git</developerConnection>
     </scm>
 
     <developers>
         <developer>
-            <id>chrsan</id>
-            <name>Christer Sandberg</name>
-            <email>chrsan@gmail.com</email>
-            <url>https://github.com/chrsan</url>
+            <id>Honwhy</id>
+            <name>Honwhy Wang</name>
+            <email>honwhy19@163.com</email>
+            <url>https://github.com/Honwhy</url>
         </developer>
     </developers>
 
@@ -68,8 +68,8 @@
                 <version>2.5.1</version>
                 <configuration>
                     <encoding>UTF-8</encoding>
-                    <source>1.6</source>
-                    <target>1.6</target>
+                    <source>1.7</source>
+                    <target>1.7</target>
                 </configuration>
             </plugin>
         </plugins>
