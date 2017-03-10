@@ -11,6 +11,7 @@ import java.util.Map;
  * Simple JAX-WS server sample.
  *
  * @author Christer Sandberg
+ * @author honwhy.wang
  */
 public class EchoServer {
 

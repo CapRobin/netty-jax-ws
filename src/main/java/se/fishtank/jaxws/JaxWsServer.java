@@ -7,22 +7,26 @@ import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.jboss.netty.bootstrap.ServerBootstrap;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.group.ChannelGroup;
-import org.jboss.netty.channel.group.DefaultChannelGroup;
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
-import org.jboss.netty.handler.codec.http.HttpChunkAggregator;
-import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
-import org.jboss.netty.handler.codec.http.HttpResponseEncoder;
-import org.jboss.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.HttpRequestDecoder;
+import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.handler.stream.ChunkedWriteHandler;
 
 /**
  * A JAX-WS only server.
  *
  * @author Christer Sandberg
+ * @author honwhy.wang
  */
 public final class JaxWsServer {
 
@@ -35,35 +39,45 @@ public final class JaxWsServer {
     /** Bootstrap instance for this server. */
     private ServerBootstrap bootstrap;
 
+    private EventLoopGroup bossGroup;
+	private EventLoopGroup workerGroup;
+	
     /**
      * Start the server.
      *
      * @param address Hostname and port.
      * @param mappings {@linkplain JaxwsHandler#JaxwsHandler(java.util.Map) Endpoint mappings.}
      * @return {@code false} if the server is already started, {@code true} otherwise.
+     * @throws Exception 
      */
-    public boolean start(final InetSocketAddress address, final Map<String, Object> mappings) {
-        if (running.compareAndSet(false, true)) {
-            channels = new DefaultChannelGroup("jax-ws-server");
-            bootstrap = new ServerBootstrap(new NioServerSocketChannelFactory());
+    public void start(final InetSocketAddress address, final Map<String, Object> mappings) throws Exception {
+    	
+        bossGroup = new NioEventLoopGroup();
+		workerGroup = new NioEventLoopGroup();
 
-            setBootstrapOptions(bootstrap);
+		bootstrap = new ServerBootstrap();
+		bootstrap.option(ChannelOption.TCP_NODELAY, true);
+		bootstrap.option(ChannelOption.SO_BACKLOG, 1024);
+		bootstrap.option(ChannelOption.SO_REUSEADDR, true);
+		bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
+				.childHandler(new ChannelInitializer<SocketChannel>(){
 
-            bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
-                @Override
-                public ChannelPipeline getPipeline() throws Exception {
-                    JaxwsHandler handler = new JaxwsHandler(channels, mappings);
+					@Override
+					protected void initChannel(SocketChannel ch) throws Exception {
+						ChannelPipeline p = ch.pipeline();
+						p.addLast(new HttpRequestDecoder());
+						p.addLast(new HttpResponseEncoder());
+						p.addLast(new HttpObjectAggregator(65536));
+						p.addLast(new ChunkedWriteHandler());
+						JaxwsHandler handler = new JaxwsHandler(channels, mappings);
+						p.addLast(handler);
+						
+					}
+					
+				});
 
-                    return Channels.pipeline(new HttpRequestDecoder(), new HttpChunkAggregator(65536),
-                            new HttpResponseEncoder(), new ChunkedWriteHandler(), handler);
-                }
-            });
-
-            channels.add(bootstrap.bind(address));
-            return true;
-        }
-
-        return false;
+		Channel ch = bootstrap.bind(address).sync().channel();
+		ch.closeFuture().sync();
     }
 
     /**
@@ -74,24 +88,11 @@ public final class JaxWsServer {
     public boolean stop() {
         if (running.compareAndSet(true, false)) {
             channels.close().awaitUninterruptibly();
-            bootstrap.releaseExternalResources();
+            //bootstrap.releaseExternalResources();
         }
 
         return false;
     }
 
-    /**
-     * Set server bootstrap options.
-     *
-     * @param bootstrap Bootstrap instance for the server.
-     */
-    private void setBootstrapOptions(ServerBootstrap bootstrap) {
-        bootstrap.setOption("child.tcpNoDelay", true);
-        bootstrap.setOption("child.keepAlive", true);
-        bootstrap.setOption("reuseAddress", true);
-        // bootstrap.setOption("receiveBufferSize", 128 * 1024);
-        // bootstrap.setOption("sendBufferSize", 128 * 1024);
-        // bootstrap.setOption("backlog", 16384);
-    }
 
 }

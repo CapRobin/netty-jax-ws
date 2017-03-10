@@ -5,14 +5,15 @@ package se.fishtank.jaxws;
 
 import java.net.InetSocketAddress;
 
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.ssl.SslHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.ssl.SslHandler;
 
 /**
  * Contains URL related methods for a JAX-WS request.
  *
  * @author Christer Sandberg
+ * @author honwhy.wang
  */
 public final class JaxwsRequestUrl {
 
@@ -97,10 +98,10 @@ public final class JaxwsRequestUrl {
                 }
             }
         }
+        
+        boolean isSecure = context.pipeline().get(SslHandler.class) != null;
 
-        boolean isSecure = context.getPipeline().get(SslHandler.class) != null;
-
-        InetSocketAddress address = (InetSocketAddress) context.getChannel().getLocalAddress();
+        InetSocketAddress address = (InetSocketAddress) context.channel().localAddress();
         String serverName = address.getHostName();
         int serverPort = address.getPort();
 

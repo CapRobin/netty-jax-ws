@@ -19,19 +19,19 @@ import com.sun.xml.ws.binding.BindingImpl;
 import com.sun.xml.ws.server.EndpointFactory;
 import com.sun.xml.ws.server.ServerRtException;
 import com.sun.xml.ws.transport.http.HttpAdapter;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.*;
-import org.jboss.netty.channel.group.ChannelGroup;
-import org.jboss.netty.handler.codec.frame.TooLongFrameException;
-import org.jboss.netty.handler.codec.http.*;
-import org.jboss.netty.util.CharsetUtil;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.*;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.handler.codec.http.*;
+import io.netty.util.CharsetUtil;
 
 /**
  * A {@link ChannelUpstreamHandler} for JAX-WS.
  *
  * @author Christer Sandberg
+ * @author honwhy.wang
  */
-public class JaxwsHandler extends SimpleChannelUpstreamHandler {
+public class JaxwsHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
     /** {@link ChannelGroup} associated with this handler. */
     private final ChannelGroup channels;
@@ -75,76 +75,31 @@ public class JaxwsHandler extends SimpleChannelUpstreamHandler {
      * {@inheritDoc}
      */
     @Override
-    public void channelOpen(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
-        if (channels != null) channels.add(e.getChannel());
+    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+        if (channels != null) channels.add(ctx.channel());
     }
+
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
-        Channel channel = e.getChannel();
-        HttpRequest request = (HttpRequest) e.getMessage();
-        HttpVersion httpVersion = request.getProtocolVersion();
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable e) throws Exception {
+        Channel channel = ctx.channel();
+		if (channel.isActive()) {
+		    Throwable cause = e.getCause();
+		    HttpResponseStatus status = (cause instanceof io.netty.handler.codec.TooLongFrameException) ?
+		            HttpResponseStatus.BAD_REQUEST : HttpResponseStatus.INTERNAL_SERVER_ERROR;
 
-        JaxwsRequestUrl jaxwsRequestUrl = JaxwsRequestUrl.newInstance(ctx, request);
-        String lookup = jaxwsRequestUrl.contextPath.isEmpty() ? "/" : jaxwsRequestUrl.contextPath;
-        lookup = lookup + (null == jaxwsRequestUrl.pathInfo || jaxwsRequestUrl.pathInfo.isEmpty() ? "" : jaxwsRequestUrl.pathInfo);
-        HttpAdapter adapter = endpointMappings.get(lookup);
-        if (adapter == null) {
-            DefaultHttpResponse response = new DefaultHttpResponse(httpVersion, HttpResponseStatus.NOT_FOUND);
-            channel.write(response).addListener(ChannelFutureListener.CLOSE);
-            return;
-        }
+		    String content = "Failure:\r\n" + cause.toString() + "\r\n";
 
-        boolean keepAlive = HttpHeaders.isKeepAlive(request);
+		    FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status,Unpooled.copiedBuffer(content, CharsetUtil.UTF_8));
+		    response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
+		    //response.setContent();
 
-        DefaultHttpResponse response = new DefaultHttpResponse(httpVersion, HttpResponseStatus.OK);
-        WebServiceContextDelegate delegate = createDelegate(adapter, jaxwsRequestUrl);
-        JaxwsConnection connection = new JaxwsConnection(request, response, jaxwsRequestUrl, delegate);
+		    channel.write(response).addListener(ChannelFutureListener.CLOSE);
+		}
 
-        if (request.getMethod() == HttpMethod.GET && isWsdlRequest(jaxwsRequestUrl.queryString)) {
-            adapter.publishWSDL(connection);
-        } else {
-            adapter.handle(connection);
-        }
-
-        // Let's honor the keep-alive header since JAX-WS RI always seem to invoke close on the
-        // connection, and I don't really know if that means that we should close the underlying
-        // one or not.
-        if (keepAlive) {
-            response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
-            if (response.getHeader(HttpHeaders.Names.CONTENT_LENGTH) == null)
-                response.setHeader(HttpHeaders.Names.CONTENT_LENGTH, response.getContent().readableBytes());
-        } else {
-            response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
-        }
-
-        ChannelFuture future = channel.write(response);
-        if (!keepAlive)
-            future.addListener(ChannelFutureListener.CLOSE);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e) throws Exception {
-        Channel channel = e.getChannel();
-        if (channel.isConnected()) {
-            Throwable cause = e.getCause();
-            HttpResponseStatus status = (cause instanceof TooLongFrameException) ?
-                    HttpResponseStatus.BAD_REQUEST : HttpResponseStatus.INTERNAL_SERVER_ERROR;
-
-            String content = "Failure:\r\n" + cause.toString() + "\r\n";
-
-            DefaultHttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
-            response.setHeader(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
-            response.setContent(ChannelBuffers.copiedBuffer(content, CharsetUtil.UTF_8));
-
-            channel.write(response).addListener(ChannelFutureListener.CLOSE);
-        }
     }
 
     /**
@@ -226,5 +181,57 @@ public class JaxwsHandler extends SimpleChannelUpstreamHandler {
     private boolean isWsdlRequest(String queryString) {
         return queryString != null && (queryString.equalsIgnoreCase("wsdl") || queryString.startsWith("xsd="));
     }
+
+
+	@Override
+	protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
+		Channel channel = ctx.channel();
+        //HttpRequest request = (HttpRequest) e.getMessage();
+        HttpVersion httpVersion = request.getProtocolVersion();
+
+        JaxwsRequestUrl jaxwsRequestUrl = JaxwsRequestUrl.newInstance(ctx, request);
+        String lookup = jaxwsRequestUrl.contextPath.isEmpty() ? "/" : jaxwsRequestUrl.contextPath;
+        lookup = lookup + (null == jaxwsRequestUrl.pathInfo || jaxwsRequestUrl.pathInfo.isEmpty() ? "" : jaxwsRequestUrl.pathInfo);
+        HttpAdapter adapter = endpointMappings.get(lookup);
+        if (adapter == null) {
+            DefaultHttpResponse response = new DefaultHttpResponse(httpVersion, HttpResponseStatus.NOT_FOUND);
+            channel.write(response).addListener(ChannelFutureListener.CLOSE);
+            return;
+        }
+
+        boolean keepAlive = HttpHeaders.isKeepAlive(request);
+
+        FullHttpResponse response = new DefaultFullHttpResponse(httpVersion, HttpResponseStatus.OK);
+        WebServiceContextDelegate delegate = createDelegate(adapter, jaxwsRequestUrl);
+        JaxwsConnection connection = new JaxwsConnection(request, response, jaxwsRequestUrl, delegate);
+
+        if (request.getMethod() == HttpMethod.GET && isWsdlRequest(jaxwsRequestUrl.queryString)) {
+            adapter.publishWSDL(connection);
+        } else {
+            adapter.handle(connection);
+        }
+
+        // Let's honor the keep-alive header since JAX-WS RI always seem to invoke close on the
+        // connection, and I don't really know if that means that we should close the underlying
+        // one or not.
+        if (keepAlive) {
+        	response.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
+            if (response.headers().get(HttpHeaders.Names.CONTENT_LENGTH) == null)
+            	response.headers().set(HttpHeaders.Names.CONTENT_LENGTH, response.content().readableBytes());
+        } else {
+        	response.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
+        }
+
+        ChannelFuture future = channel.write(response);
+        if (!keepAlive)
+            future.addListener(ChannelFutureListener.CLOSE);
+		
+	}
+
+	@Override
+	public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+		super.channelReadComplete(ctx);
+		ctx.flush();
+	}
 
 }

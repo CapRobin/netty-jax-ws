@@ -7,7 +7,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 
 import javax.xml.ws.handler.MessageContext;
 
@@ -15,17 +21,18 @@ import com.sun.istack.NotNull;
 import com.sun.xml.ws.api.message.Packet;
 import com.sun.xml.ws.api.server.WebServiceContextDelegate;
 import com.sun.xml.ws.transport.http.WSHTTPConnection;
-import org.jboss.netty.buffer.ChannelBufferInputStream;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.handler.codec.http.HttpHeaders;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponse;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpResponseStatus;
 
 /**
  * Represents a JAX-WS connection.
  *
  * @author Christer Sandberg
+ * @author honwhy.wang
  */
 public class JaxwsConnection extends WSHTTPConnection {
 
@@ -36,10 +43,10 @@ public class JaxwsConnection extends WSHTTPConnection {
     }
 
     /** The HTTP request for this connection. */
-    private final HttpRequest httpRequest;
+    private final FullHttpRequest httpRequest;
 
     /** The HTTP response for this connection. */
-    private final HttpResponse httpResponse;
+    private final FullHttpResponse httpResponse;
 
     /** The JAX-WS request URL for this connection. */
     private final JaxwsRequestUrl jaxwsRequestUrl;
@@ -64,7 +71,7 @@ public class JaxwsConnection extends WSHTTPConnection {
      * @param jaxwsRequestUrl JAX-WS request URL.
      * @param webServiceContextDelegate Web Service context delegate.
      */
-    public JaxwsConnection(HttpRequest httpRequest, HttpResponse httpResponse,
+    public JaxwsConnection(FullHttpRequest httpRequest, FullHttpResponse httpResponse,
                            JaxwsRequestUrl jaxwsRequestUrl,
                            WebServiceContextDelegate webServiceContextDelegate) {
         this.httpRequest = httpRequest;
@@ -90,7 +97,12 @@ public class JaxwsConnection extends WSHTTPConnection {
      */
     @Override
     public @NotNull Set<String> getRequestHeaderNames() {
-        return httpRequest.getHeaderNames();
+    	List<Entry<String, String>>  entries = httpRequest.headers().entries();
+    	Set<String> set = new HashSet<String>();
+    	for(Entry<String, String> entry : entries) {
+    		set.add(entry.getKey());
+    	}
+        return set;
     }
 
     /**
@@ -109,7 +121,7 @@ public class JaxwsConnection extends WSHTTPConnection {
      */
     @Override
     public String getRequestHeader(@NotNull String headerName) {
-        return httpRequest.getHeader(headerName);
+    	return httpRequest.headers().get(headerName);
     }
 
     /**
@@ -120,15 +132,14 @@ public class JaxwsConnection extends WSHTTPConnection {
         responseHeaders = headers;
         if (headers == null)
             return;
-
-        httpResponse.clearHeaders();
+        httpResponse.headers().clear();
         for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
             String name = entry.getKey();
             if (name.equalsIgnoreCase(HttpHeaders.Names.CONTENT_TYPE) ||
                     name.equalsIgnoreCase(HttpHeaders.Names.CONTENT_LENGTH)) continue;
 
             for (String value : entry.getValue())
-                httpResponse.addHeader(name, value);
+            	httpResponse.headers().add(name, value);
         }
     }
 
@@ -140,7 +151,7 @@ public class JaxwsConnection extends WSHTTPConnection {
         initializeResponseHeaders();
         responseHeaders.put(key, value);
         for (String v : value)
-            httpResponse.addHeader(key, v);
+        	httpResponse.headers().add(key, v);
     }
 
     /**
@@ -166,7 +177,7 @@ public class JaxwsConnection extends WSHTTPConnection {
     @Override
     @Property(MessageContext.HTTP_RESPONSE_CODE)
     public int getStatus() {
-        return httpResponse.getStatus().getCode();
+        return httpResponse.getStatus().code();
     }
 
     /**
@@ -182,7 +193,7 @@ public class JaxwsConnection extends WSHTTPConnection {
      */
     @Override
     public @NotNull InputStream getInput() throws IOException {
-        return new ChannelBufferInputStream(httpRequest.getContent());
+    	return new ByteBufInputStream(httpRequest.content());
     }
 
     /**
@@ -218,7 +229,7 @@ public class JaxwsConnection extends WSHTTPConnection {
     @Override
     @Property(MessageContext.HTTP_REQUEST_METHOD)
     public @NotNull String getRequestMethod() {
-        return httpRequest.getMethod().getName();
+        return httpRequest.getMethod().name();
     }
 
     /**
@@ -292,7 +303,7 @@ public class JaxwsConnection extends WSHTTPConnection {
      */
     @Override
     public String getProtocol() {
-        return httpRequest.getProtocolVersion().getText();
+        return httpRequest.getProtocolVersion().text();
     }
 
     /**
@@ -312,10 +323,10 @@ public class JaxwsConnection extends WSHTTPConnection {
     }
 
     private void initializeRequestHeaders() {
-        Set<String> headerNames = httpRequest.getHeaderNames();
+        Set<String> headerNames = getRequestHeaderNames();
         requestHeaders = new HashMap<String, List<String>>(headerNames.size());
         for (String name : headerNames)
-            requestHeaders.put(name, httpRequest.getHeaders(name));
+            requestHeaders.put(name, httpRequest.headers().getAll(name));
     }
 
     private void initializeResponseHeaders() {
@@ -325,15 +336,15 @@ public class JaxwsConnection extends WSHTTPConnection {
 
     static class ResponseOutputStream extends ByteArrayOutputStream {
 
-        final HttpResponse response;
+        final FullHttpResponse response;
 
-        ResponseOutputStream(HttpResponse response) {
+        ResponseOutputStream(FullHttpResponse response) {
             this.response = response;
         }
 
         @Override
         public void close() throws IOException {
-            response.setContent(ChannelBuffers.wrappedBuffer(toByteArray()));
+        	response.content().writeBytes(toByteArray());
         }
 
     }
