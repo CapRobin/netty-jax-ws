@@ -100,7 +100,7 @@ public final class JaxwsRequestUrl {
         }
         
         boolean isSecure = context.pipeline().get(SslHandler.class) != null;
-
+        String host = request.headers().get("Host");
         InetSocketAddress address = (InetSocketAddress) context.channel().localAddress();
         String serverName = address.getHostName();
         int serverPort = address.getPort();
@@ -108,9 +108,10 @@ public final class JaxwsRequestUrl {
         StringBuilder baseAddress = new StringBuilder();
         baseAddress.append(isSecure ? "https" : "http");
         baseAddress.append("://");
-        baseAddress.append(serverName);
-        baseAddress.append(':');
-        baseAddress.append(serverPort);
+        //baseAddress.append(serverName);
+        //baseAddress.append(':');
+        //baseAddress.append(serverPort);
+        baseAddress.append(host);
         baseAddress.append(contextPath);
         baseAddress.append(pathInfo);
         
